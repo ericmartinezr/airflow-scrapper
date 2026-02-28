@@ -1,8 +1,7 @@
 import logging
-import httpx
 import pendulum
 from itertools import chain
-from bs4 import BeautifulSoup
+from scrapling import Fetcher
 from datetime import timedelta
 from airflow.sdk import dag, task
 from airflow.exceptions import AirflowSkipException
@@ -11,6 +10,12 @@ from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
 
 logger = logging.getLogger(__name__)
 
+
+# TODO: Revisar cuando sale la nueva version
+# OTEL no logra enviar todas las métricas ya que las envia en lotes
+# y algunas metricas viven poco tiempo quedando fuera de esos lotes
+# Se corrigio en este PR que ya está mergeado pero aun no se librea
+# https://github.com/apache/airflow/pull/61808
 
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/102.0.5000.63 Safari/537.36',
@@ -50,10 +55,10 @@ ENDPOINTS = [
 @dag(
     "emol",
     description="Scrapper DAG for Emol",
-    schedule="@daily",
-    start_date=pendulum.datetime(2025, 1, 1, tz="UTC"),
+    schedule="0 0 * * *",
+    start_date=pendulum.datetime(2025, 1, 1, 0, 0, 0, tz="UTC"),
     catchup=True,
-    dagrun_timeout=timedelta(minutes=5),
+    dagrun_timeout=timedelta(minutes=60),
     tags=["scrapper"],
     default_args={
         "depends_on_past": False,
@@ -65,29 +70,13 @@ ENDPOINTS = [
 )
 def scrapper():
 
-    create_news_table = SQLExecuteQueryOperator(
-        task_id="create_news_table",
-        conn_id="news_db_con",
-        sql="""
-        CREATE TABLE IF NOT EXISTS emol (
-            id integer primary key,
-            categoria TEXT,
-            titulo text,
-            bajada text,
-            noticia text,
-            fecha_publicacion timestamp,
-            fecha_modificacion timestamp
-        )
-        """
-    )
-
     @task()
     def extract_news_links(endpoint: dict, **context):
         try:
             categoria = endpoint["categoria"]
             url = endpoint["url"]
 
-            # Date in YYYY-MM-DD
+            # Fecha en formato YYYY-MM-DD
             start_date = context["logical_date"]
             yesterday = start_date.subtract(days=1)
             record_date = yesterday.format("YYYY-MM-DD")
@@ -102,27 +91,25 @@ def scrapper():
 
             def fetch_data(params):
                 news_links = []
-                with httpx.Client(headers=HEADERS, params=params, http2=True, timeout=30.0) as client:
-                    request = client.get(url)
-                    request.raise_for_status()
-                    data = request.json()
+                request = Fetcher.get(url, params=params)
+                data = request.json()
 
-                    hits_news = data["hits"]["hits"]
-                    if not hits_news:
-                        return []
+                hits_news = data["hits"]["hits"]
+                if not hits_news:
+                    return []
 
-                    for hit in hits_news:
-                        id = hit["_source"]["id"]
-                        permalink = hit["_source"]["permalink"]
-                        fecha_publicacion = hit["_source"]["fechaPublicacion"]
-                        fecha_modificacion = hit["_source"]["fechaModificacion"]
-                        news_links.append({
-                            "id": id,
-                            "categoria": categoria,
-                            "fecha_publicacion": fecha_publicacion,
-                            "fecha_modificacion": fecha_modificacion,
-                            "link": permalink.replace("http://", "https://")
-                        })
+                for hit in hits_news:
+                    id = hit["_source"]["id"]
+                    permalink = hit["_source"]["permalink"]
+                    fecha_publicacion = hit["_source"]["fechaPublicacion"]
+                    fecha_modificacion = hit["_source"]["fechaModificacion"]
+                    news_links.append({
+                        "id": id,
+                        "categoria": categoria,
+                        "fecha_publicacion": fecha_publicacion,
+                        "fecha_modificacion": fecha_modificacion,
+                        "link": permalink.replace("http://", "https://")
+                    })
 
                 return news_links
 
@@ -186,23 +173,18 @@ def scrapper():
         logger.info(f"Scrapping {link}, with publish date {fecha_publicacion}")
 
         try:
-            with httpx.Client(headers=HEADERS, http2=True, timeout=30.0) as client:
-                request = client.get(link, follow_redirects=True)
-                request.raise_for_status()
-
-                bs = BeautifulSoup(request.text, "html5lib")
-                titulo_noticia = bs.select(
-                    "h1#cuDetalle_cuTitular_tituloNoticia")[0]
-                bajada_noticia = bs.select(
-                    "h2#cuDetalle_cuTitular_bajadaNoticia")[0]
-                # TODO: Eliminar caracteres raros y texto no relacionado a la noticia
-                texto_noticia = "\n".join([
-                    tag.get_text(strip=True)
-                    for tag in bs.select(
-                        "div#cuDetalle_cuTexto_textoNoticia > div"
-                    )
-                    if tag.get_text(strip=True)
-                ])
+            page = Fetcher.get(link)
+            titulo_noticia = page.css(
+                "h1#cuDetalle_cuTitular_tituloNoticia")[0].text
+            bajada_noticia = page.css(
+                "h2#cuDetalle_cuTitular_bajadaNoticia")[0].text
+            texto_noticia = "\n".join([
+                tag.get_all_text(strip=True)
+                for tag in page.css(
+                    "div#cuDetalle_cuTexto_textoNoticia > div"
+                )
+                if tag.get_all_text(strip=True)
+            ])
 
             return {
                 "id": id,
@@ -220,7 +202,7 @@ def scrapper():
             raise AirflowSkipException
 
     @task()
-    def save_data(data: dict):
+    def save_data(data: dict, **context):
         id = data["id"]
         categoria = data["categoria"]
         titulo = data["titulo"]
@@ -228,13 +210,14 @@ def scrapper():
         noticia = data["noticia"]
         fecha_publicacion = data["fecha_publicacion"]
         fecha_modificacion = data["fecha_modificacion"]
+        fecha_proceso = context["logical_date"]
 
         query_insert = f"""
-        INSERT INTO emol (id, categoria, titulo, bajada, noticia, fecha_publicacion, fecha_modificacion)
-        VALUES (%(id)s, %(categoria)s, %(titulo)s, %(bajada)s, %(noticia)s, %(fecha_publicacion)s, %(fecha_modificacion)s)
+        INSERT INTO emol (id, categoria, titulo, bajada, noticia, fecha_publicacion, fecha_modificacion, fecha_proceso)
+        VALUES (%(id)s, %(categoria)s, %(titulo)s, %(bajada)s, %(noticia)s, %(fecha_publicacion)s, %(fecha_modificacion)s, %(fecha_proceso)s)
         ON CONFLICT (id) DO UPDATE SET titulo = EXCLUDED."titulo", categoria = EXCLUDED."categoria",
         bajada = EXCLUDED."bajada", noticia = EXCLUDED."noticia", 
-        fecha_publicacion = EXCLUDED."fecha_publicacion", fecha_modificacion = EXCLUDED."fecha_modificacion"
+        fecha_publicacion = EXCLUDED."fecha_publicacion", fecha_modificacion = EXCLUDED."fecha_modificacion", fecha_proceso = EXCLUDED.fecha_proceso
         """
 
         try:
@@ -249,7 +232,8 @@ def scrapper():
                     "bajada": bajada,
                     "noticia": noticia,
                     "fecha_publicacion": fecha_publicacion,
-                    "fecha_modificacion": fecha_modificacion
+                    "fecha_modificacion": fecha_modificacion,
+                    "fecha_proceso": fecha_proceso
                 })
             conn.commit()
             return 0
@@ -264,7 +248,7 @@ def scrapper():
         link_data=_flattened_links
     )
     _save_data = save_data.expand(data=_extract_news_data)
-    create_news_table >> _save_data
+    _save_data
 
 
 scrapper()
