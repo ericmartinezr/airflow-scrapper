@@ -182,3 +182,5 @@ python src/utils/run_failed_dags.py
 ---
 
 *Nota: La presente documentación ha sido verificada y reestructurada con asistencia de Inteligencia Artificial para maximizar su claridad y legibilidad, preservando y respetando íntegramente las instrucciones técnicas dictadas por el desarrollador original para la versión 3.1.7.*
+
+*Nota adicional: Los archivos de testing (`tests/dags/...`) fueron generados con IA.*
