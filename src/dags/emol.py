@@ -6,7 +6,6 @@ from datetime import timedelta
 from airflow.sdk import dag, task
 from airflow.exceptions import AirflowSkipException
 from airflow.providers.postgres.hooks.postgres import PostgresHook
-from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
 
 logger = logging.getLogger(__name__)
 
@@ -16,17 +15,6 @@ logger = logging.getLogger(__name__)
 # y algunas metricas viven poco tiempo quedando fuera de esos lotes
 # Se corrigio en este PR que ya está mergeado pero aun no se librea
 # https://github.com/apache/airflow/pull/61808
-
-HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/102.0.5000.63 Safari/537.36',
-    'Accept': 'text/html,application/json,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9',
-    'Accept-Encoding': 'gzip, deflate, br',
-    'Accept-Language': 'en-US,en;q=0.9',
-    'Sec-Fetch-Dest': 'document',
-    'Sec-Fetch-Mode': 'navigate',
-    'Sec-Fetch-Site': 'none',
-    'Sec-Fetch-User': '?1'
-}
 
 ENDPOINTS = [
     {
