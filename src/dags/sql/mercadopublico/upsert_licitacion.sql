@@ -26,7 +26,8 @@ INSERT INTO mercadopublico_licitacion (
     fecha_creacion,
     fecha_cierre,
     fecha_inicio,
-    fecha_final
+    fecha_final,
+    fecha_proceso
 )
 VALUES (
     %(codigo)s,
@@ -56,7 +57,8 @@ VALUES (
     %(fecha_creacion)s,
     %(fecha_cierre)s,
     %(fecha_inicio)s,
-    %(fecha_final)s
+    %(fecha_final)s,
+    NOW()
 )
 ON CONFLICT (codigo) DO UPDATE SET
     nombre = EXCLUDED.nombre,
@@ -85,4 +87,5 @@ ON CONFLICT (codigo) DO UPDATE SET
     fecha_creacion = EXCLUDED.fecha_creacion,
     fecha_cierre = EXCLUDED.fecha_cierre,
     fecha_inicio = EXCLUDED.fecha_inicio,
-    fecha_final = EXCLUDED.fecha_final
+    fecha_final = EXCLUDED.fecha_final,
+    fecha_proceso = NOW()

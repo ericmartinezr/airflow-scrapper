@@ -88,7 +88,7 @@ def scrapper():
             raise AirflowSkipException
 
     @task(max_active_tis_per_dag=1, retries=3)
-    def extract_licitaciones_detalle(codigo: str, **context):
+    def extract_licitaciones_detalle(codigo: str):
         """
         Extrae el detalle de la licitacion según su código
 
@@ -120,7 +120,6 @@ def scrapper():
                     f"Error al consultar: \nCodigo: {data["Codigo"]}\n{data["Mensaje"]}"
                 )
 
-            fecha_proceso = context["logical_date"]
             licitacion = data["Listado"][0]
             licitacion_comprador = licitacion["Comprador"]
             licitacion_fechas = licitacion["Fechas"]
@@ -154,7 +153,6 @@ def scrapper():
                 "fecha_cierre": licitacion_fechas["FechaCierre"],
                 "fecha_inicio": licitacion_fechas["FechaInicio"],
                 "fecha_final": licitacion_fechas["FechaFinal"],
-                "fecha_proceso": fecha_proceso,
                 "listado_items": licitacion["Items"]["Listado"]
             }
 
@@ -165,9 +163,8 @@ def scrapper():
             raise AirflowSkipException
 
     @task()
-    def extract_licitacion_items(licitaciones, **context):
+    def extract_licitacion_items(licitaciones):
         all_items = []
-        fecha_proceso = context["logical_date"]
         for licitacion in licitaciones:
             logger.info(
                 f"Se encontraron {len(licitacion['listado_items'])} items en la licitacion")
@@ -185,8 +182,7 @@ def scrapper():
                     "rut_proveedor": (item.get("Adjudicacion") or {}).get("RutProveedor", ""),
                     "nombre_proveedor": (item.get("Adjudicacion") or {}).get("NombreProveedor", ""),
                     "cantidad_adjudicada": (item.get("Adjudicacion") or {}).get("NombreProveedor", 0),
-                    "monto_unitario": (item.get("Adjudicacion") or {}).get("MontoUnitario", 0),
-                    "fecha_proceso": fecha_proceso
+                    "monto_unitario": (item.get("Adjudicacion") or {}).get("MontoUnitario", 0)
                 }
                 # Considera solo 1 item ya que pueden ser muchos y supera el limite de mapped tasks de Airflow
                 for item in licitacion["listado_items"][:1]

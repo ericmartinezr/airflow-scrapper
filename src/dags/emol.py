@@ -202,7 +202,7 @@ def scrapper():
             raise AirflowSkipException
 
     @task()
-    def save_data(data: dict, **context):
+    def save_data(data: dict):
         id = data["id"]
         categoria = data["categoria"]
         titulo = data["titulo"]
@@ -210,11 +210,10 @@ def scrapper():
         noticia = data["noticia"]
         fecha_publicacion = data["fecha_publicacion"]
         fecha_modificacion = data["fecha_modificacion"]
-        fecha_proceso = context["logical_date"]
 
         query_insert = f"""
         INSERT INTO emol (id, categoria, titulo, bajada, noticia, fecha_publicacion, fecha_modificacion, fecha_proceso)
-        VALUES (%(id)s, %(categoria)s, %(titulo)s, %(bajada)s, %(noticia)s, %(fecha_publicacion)s, %(fecha_modificacion)s, %(fecha_proceso)s)
+        VALUES (%(id)s, %(categoria)s, %(titulo)s, %(bajada)s, %(noticia)s, %(fecha_publicacion)s, %(fecha_modificacion)s, NOW())
         ON CONFLICT (id) DO UPDATE SET titulo = EXCLUDED."titulo", categoria = EXCLUDED."categoria",
         bajada = EXCLUDED."bajada", noticia = EXCLUDED."noticia", 
         fecha_publicacion = EXCLUDED."fecha_publicacion", fecha_modificacion = EXCLUDED."fecha_modificacion", fecha_proceso = EXCLUDED.fecha_proceso
@@ -232,8 +231,7 @@ def scrapper():
                     "bajada": bajada,
                     "noticia": noticia,
                     "fecha_publicacion": fecha_publicacion,
-                    "fecha_modificacion": fecha_modificacion,
-                    "fecha_proceso": fecha_proceso
+                    "fecha_modificacion": fecha_modificacion
                 })
             conn.commit()
             return 0

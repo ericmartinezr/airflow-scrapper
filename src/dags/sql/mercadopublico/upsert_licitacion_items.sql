@@ -11,7 +11,8 @@ INSERT INTO mercadopublico_licitacion_items (
     rut_proveedor,
     nombre_proveedor,
     cantidad_adjudicada,
-    monto_unitario
+    monto_unitario,
+    fecha_proceso
 )
 VALUES (
     %(correlativo)s,
@@ -26,7 +27,8 @@ VALUES (
     %(rut_proveedor)s,
     %(nombre_proveedor)s,
     %(cantidad_adjudicada)s,
-    %(monto_unitario)s
+    %(monto_unitario)s,
+    NOW()
 )
 ON CONFLICT (correlativo, codigo_licitacion, codigo_producto) DO UPDATE SET
     codigo_categoria = EXCLUDED.codigo_categoria,
@@ -38,4 +40,5 @@ ON CONFLICT (correlativo, codigo_licitacion, codigo_producto) DO UPDATE SET
     rut_proveedor = EXCLUDED.rut_proveedor,
     nombre_proveedor = EXCLUDED.nombre_proveedor,
     cantidad_adjudicada = EXCLUDED.cantidad_adjudicada,
-    monto_unitario = EXCLUDED.monto_unitario
+    monto_unitario = EXCLUDED.monto_unitario,
+    fecha_proceso = NOW()
