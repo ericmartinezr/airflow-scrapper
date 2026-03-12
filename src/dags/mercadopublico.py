@@ -19,7 +19,7 @@ ENDPOINT_LICITACION = "https://api.mercadopublico.cl/servicios/v1/publico/licita
     description="Scrapper DAG for MercadoPublico",
     schedule="0 0 * * *",
     start_date=pendulum.datetime(2025, 1, 1, 0, 0, 0, tz="UTC"),
-    catchup=False,
+    catchup=True,
     dagrun_timeout=timedelta(minutes=60),
     tags=["scrapper"],
     default_args={
